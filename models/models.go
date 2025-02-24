@@ -24,3 +24,9 @@ type Departements struct {
 	DepartementName string `json:"departement_name"`
 	Location        string `json:"location"`
 }
+
+type User struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}

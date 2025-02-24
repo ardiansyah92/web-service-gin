@@ -3,11 +3,175 @@ package controllers
 import (
 	"example/web-service-gin/initializers"
 	"example/web-service-gin/models"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// Secret key for signing JWT tokens
+var jwtSecret = []byte("your-secret-key")
+
+// GenerateJWT creates a JWT token for a user
+func GenerateJWT(username string) (string, error) {
+	claims := jwt.MapClaims{
+		"username": username,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Token expires in 24 hours
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func JWTAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenString := c.GetHeader("Authorization")
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    "401",
+				"message": "Unauthorized",
+			})
+			c.Abort()
+			return
+		}
+
+		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
+
+		claims, err := ValidateJWT(tokenString)
+		if err != nil || claims == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": "401", "message": "Invalid Token"})
+			c.Abort()
+			return
+		}
+		c.Set("username", (*claims)["username"])
+		c.Next()
+	}
+}
+
+// ValidateJWT parses and verifies a JWT token
+func ValidateJWT(tokenString string) (*jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return &claims, nil
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+func Register(c *gin.Context) {
+	var request struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid input",
+			"code":    "400",
+		})
+		return
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to hash password",
+			"code":    "500",
+		})
+		return
+	}
+
+	// Check if user already exists
+	var existingUser models.User
+	if err := models.DB.Where("username = ?", request.Username).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"message": "User already exists",
+			"code":    "409",
+		})
+		return
+	}
+
+	// Create user in database
+	user := models.User{Username: request.Username, Password: string(hashedPassword)}
+	result := models.DB.Create(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to register user",
+			"code":    "500",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Success Register User",
+		"code":    "200",
+	})
+}
+
+// Login
+func Login(c *gin.Context) {
+	var request struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid Input",
+			"code":    "404",
+		})
+	}
+	var user models.User
+	result := models.DB.Where("username = ?", request.Username).First(&user)
+
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "User not found",
+			"code":    "404",
+		})
+		return
+	}
+
+	// Compare password
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(request.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Incorrect password",
+			"code":    "404",
+		})
+		return
+	}
+
+	// Generate JWT token
+	token, _ := GenerateJWT(user.Username)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Success password",
+		"data":    token,
+		"code":    "200",
+	})
+
+}
 
 // getAlbums responds with the list of all albums as JSON.
 func GetAlbums(c *gin.Context) {

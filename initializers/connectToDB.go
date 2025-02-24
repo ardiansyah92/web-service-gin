@@ -20,4 +20,5 @@ func ConnectToDB() {
 	}
 	models.DB = DB                         // Assign the database connection globally
 	DB.AutoMigrate(&models.Departements{}) // Ensure the table exists
+	DB.AutoMigrate(&models.User{})
 }

@@ -17,11 +17,20 @@ func main() {
 	router.GET("/albums", controllers.GetAlbums)
 	router.POST("/albums", controllers.PostAlbums)
 	router.GET("/albums/:id", controllers.GetAlbumsByID)
-	router.POST("/departemen", controllers.PostDepartement)
-	router.GET("/departemen", controllers.GetDepartement)
-	router.GET("/departemen/:id", controllers.GetDepartementId)
-	router.PUT("/departemenid/:id", controllers.PutDepartementId)
-	router.DELETE("/departemen/:id", controllers.DeleteDepartement)
+	router.POST("/register", controllers.Register)
+	router.POST("/login", controllers.Login)
+	// Protected Routes (JWT Middleware)
+
+	auth := router.Group("/departemen")
+	auth.Use(controllers.JWTAuthMiddleware())
+
+	{
+		auth.POST("/", controllers.PostDepartement)
+		auth.GET("/", controllers.GetDepartement)
+		auth.GET("/:id", controllers.GetDepartementId)
+		auth.PUT("/:id", controllers.PutDepartementId)
+		auth.DELETE("/:id", controllers.DeleteDepartement)
+	}
 
 	router.Run()
 }
