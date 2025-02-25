@@ -21,15 +21,17 @@ func main() {
 	router.POST("/login", controllers.Login)
 	// Protected Routes (JWT Middleware)
 
-	auth := router.Group("/departemen")
+	auth := router.Group("/")
 	auth.Use(controllers.JWTAuthMiddleware())
 
 	{
-		auth.POST("/", controllers.PostDepartement)
-		auth.GET("/", controllers.GetDepartement)
-		auth.GET("/:id", controllers.GetDepartementId)
-		auth.PUT("/:id", controllers.PutDepartementId)
-		auth.DELETE("/:id", controllers.DeleteDepartement)
+		auth.POST("departemen/", controllers.PostDepartement)
+		auth.GET("departemen/", controllers.GetDepartement)
+		auth.GET("departemen/:id", controllers.GetDepartementId)
+		auth.PUT("departemen/:id", controllers.PutDepartementId)
+		auth.DELETE("departemen/:id", controllers.DeleteDepartement)
+		auth.GET("users/", controllers.GetUser)
+		auth.GET("me/", controllers.GetProfile)
 	}
 
 	router.Run()

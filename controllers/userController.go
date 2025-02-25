@@ -21,7 +21,7 @@ var jwtSecret = []byte("your-secret-key")
 func GenerateJWT(username string) (string, error) {
 	claims := jwt.MapClaims{
 		"username": username,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Token expires in 24 hours
+		"exp":      time.Now().Add(time.Hour * 1).Unix(), // Token expires in 24 hours
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -53,7 +53,11 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		fmt.Printf("Claims: %+v\n", claims)
+
 		c.Set("username", (*claims)["username"])
+
 		c.Next()
 	}
 }
@@ -82,6 +86,10 @@ func Register(c *gin.Context) {
 	var request struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Role     bool   `json:"role"`
+		Phone    string `jso:"number"`
+		Email    string `json:email`
+		Address  string `json:address`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -103,7 +111,7 @@ func Register(c *gin.Context) {
 	}
 
 	// Check if user already exists
-	var existingUser models.User
+	var existingUser models.Users
 	if err := models.DB.Where("username = ?", request.Username).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{
 			"message": "User already exists",
@@ -113,7 +121,7 @@ func Register(c *gin.Context) {
 	}
 
 	// Create user in database
-	user := models.User{Username: request.Username, Password: string(hashedPassword)}
+	user := models.Users{Username: request.Username, Password: string(hashedPassword), Role: request.Role, Phone: request.Phone, Email: request.Email, Address: request.Address}
 	result := models.DB.Create(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -141,7 +149,7 @@ func Login(c *gin.Context) {
 			"code":    "404",
 		})
 	}
-	var user models.User
+	var user models.Users
 	result := models.DB.Where("username = ?", request.Username).First(&user)
 
 	if result.Error != nil {
@@ -162,15 +170,32 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Prepare user response
+	// datauserresponse := struct {
+	// 	ID       uint   `json:"id_user"`
+	// 	Username string `json:"username"`
+	// 	Role     bool   `json:"role"`
+	// 	Phone    string `json:"phone"`
+	// 	Email    string `json:"email"`
+	// 	Address  string `json:"address"`
+	// }{
+	// 	ID:       user.ID,
+	// 	Username: user.Username,
+	// 	Role:     user.Role,
+	// 	Phone:    user.Phone,
+	// 	Email:    user.Email,
+	// 	Address:  user.Address,
+	// }
+
 	// Generate JWT token
 	token, _ := GenerateJWT(user.Username)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Success password",
-		"data":    token,
+		// "data":    datauserresponse,
+		"token":   token,
+		"message": "Success Login",
 		"code":    "200",
 	})
-
 }
 
 // getAlbums responds with the list of all albums as JSON.
@@ -263,6 +288,97 @@ func GetDepartement(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, gin.H{
 		"message": "Get Data Departement",
 		"data":    getDepartements,
+		"code":    "200",
+	})
+}
+
+// GetProfile
+func GetProfile(c *gin.Context) {
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Unauthorized",
+			"code":    "401",
+		})
+		return
+	}
+	var user models.Users
+	result := models.DB.Where("username = ?", username).First(&user)
+
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"message": "Profile not found",
+			"code":    "404",
+		})
+		return
+	}
+	// Prepare user response
+	getMeprofile := struct {
+		ID       uint   `json:"id_user"`
+		Username string `json:"username"`
+		Role     bool   `json:"role"`
+		Phone    string `json:"phone"`
+		Email    string `json:"email"`
+		Address  string `json:"address"`
+	}{
+		ID:       user.ID,
+		Username: user.Username,
+		Role:     user.Role,
+		Phone:    user.Phone,
+		Email:    user.Email,
+		Address:  user.Address,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Get Profil Me",
+		"data":    getMeprofile,
+		"code":    "200",
+	})
+}
+
+func GetUser(c *gin.Context) {
+
+	// Fetch users from the database
+	var getUsers []models.Users
+	if err := initializers.DB.Find(&getUsers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch data",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Prepare response without exposing passwords
+	var usersResponse []struct {
+		ID       uint   `json:"id_user"`
+		Username string `json:"username"`
+		Role     bool   `json:"role"`
+		Phone    string `json:"phone"`
+		Email    string `json:"email"`
+		Address  string `json:"address"`
+	}
+
+	for _, user := range getUsers {
+		usersResponse = append(usersResponse, struct {
+			ID       uint   `json:"id_user"`
+			Username string `json:"username"`
+			Role     bool   `json:"role"`
+			Phone    string `json:"phone"`
+			Email    string `json:"email"`
+			Address  string `json:"address"`
+		}{
+			ID:       user.ID,
+			Username: user.Username,
+			Role:     user.Role,
+			Phone:    user.Phone,
+			Email:    user.Email,
+			Address:  user.Address,
+		})
+	}
+
+	c.IndentedJSON(http.StatusOK, gin.H{
+		"message": "Get Data User",
+		"data":    usersResponse,
 		"code":    "200",
 	})
 }
