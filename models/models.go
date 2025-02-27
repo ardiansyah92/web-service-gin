@@ -26,11 +26,20 @@ type Departements struct {
 }
 
 type Users struct {
-	ID       uint   `json:"id_user" gorm:"primaryKey;autoIncrement"`
+	ID_User  uint   `json:"id_user" gorm:"primaryKey;autoIncrement"`
 	Username string `json:"username" gorm:"unique;not null"`
 	Password string `json:"password" gorm:"not null"`
 	Role     bool   `json:"role" gorm:"default:false"`
 	Phone    string `json:"phone" gorm:"unique;not null"`
 	Email    string `json:"email" gorm:"unique;not null"`
 	Address  string `json:"address" gorm:"unique;not null"`
+}
+
+type Loan struct {
+	ID_Loan          uint   `json:"id_loan" gorm:"primaryKey;autoIncrement"`
+	Loan_Application string `json:"loan_application" gorm:"unique;not null"`
+	Interest_Rate    string `json:"interest_rate"`
+	Month            string `json:"month"`
+	User_Loan        string `json:"user_loan"`
+	ID_User          uint   `json:"id_user"`
 }

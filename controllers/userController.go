@@ -18,9 +18,11 @@ import (
 var jwtSecret = []byte("your-secret-key")
 
 // GenerateJWT creates a JWT token for a user
-func GenerateJWT(username string) (string, error) {
+func GenerateJWT(username string, role bool, ID_User uint) (string, error) {
 	claims := jwt.MapClaims{
 		"username": username,
+		"role":     role,
+		"id_user":  ID_User,
 		"exp":      time.Now().Add(time.Hour * 1).Unix(), // Token expires in 24 hours
 	}
 
@@ -49,14 +51,18 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 
 		claims, err := ValidateJWT(tokenString)
 		if err != nil || claims == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": "401", "message": "Invalid Token"})
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    "401",
+				"message": "Invalid Token",
+			})
 			c.Abort()
 			return
 		}
 
-		fmt.Printf("Claims: %+v\n", claims)
+		// fmt.Printf("Claims: %+v\n", claims)
 
 		c.Set("username", (*claims)["username"])
+		c.Set("id_user", (*claims)["id_user"])
 
 		c.Next()
 	}
@@ -76,14 +82,21 @@ func ValidateJWT(tokenString string) (*jwt.MapClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// fmt.Println(claims["role"])
+		// if claims["role"] == false {
+		// 	return nil, fmt.Errorf("allow access")
+		// }
 		return &claims, nil
+
 	}
 
 	return nil, fmt.Errorf("invalid token")
 }
 
+// Register User
 func Register(c *gin.Context) {
 	var request struct {
+		ID_User  uint   `json:"id_user" gorm:"primaryKey;autoIncrement"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Role     bool   `json:"role"`
@@ -170,25 +183,8 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Prepare user response
-	// datauserresponse := struct {
-	// 	ID       uint   `json:"id_user"`
-	// 	Username string `json:"username"`
-	// 	Role     bool   `json:"role"`
-	// 	Phone    string `json:"phone"`
-	// 	Email    string `json:"email"`
-	// 	Address  string `json:"address"`
-	// }{
-	// 	ID:       user.ID,
-	// 	Username: user.Username,
-	// 	Role:     user.Role,
-	// 	Phone:    user.Phone,
-	// 	Email:    user.Email,
-	// 	Address:  user.Address,
-	// }
-
 	// Generate JWT token
-	token, _ := GenerateJWT(user.Username)
+	token, _ := GenerateJWT(user.Username, user.Role, user.ID_User)
 
 	c.JSON(http.StatusOK, gin.H{
 		// "data":    datauserresponse,
@@ -248,6 +244,99 @@ func GetAlbumsByID(c *gin.Context) {
 	})
 }
 
+// PostLoan adds a loan from JSON received in the request body
+func PostLoan(c *gin.Context) {
+	var newLoan models.Loan
+
+	// Get the logged-in user's ID from the context — set during authentication middleware
+	ID_User, exists := c.Get("id_user")
+	// fmt.Println(ID_User)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authorized",
+		})
+		return
+	}
+
+	// Bind the JSON request body to newLoan
+	if err := c.BindJSON(&newLoan); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	// Ensure ID_User is correctly converted to uint
+	switch v := ID_User.(type) {
+	case float64: // If ID_User is a float64 (common with JSON numbers)
+		newLoan.ID_User = uint(v)
+	case int: // If it's an int
+		newLoan.ID_User = uint(v)
+	case string: // If it's a string
+		userID, err := strconv.Atoi(v)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to convert user ID",
+			})
+			return
+		}
+		newLoan.ID_User = uint(userID)
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Unexpected type for user ID",
+		})
+		return
+	}
+
+	// Insert new loan into the database
+	if err := initializers.DB.Create(&newLoan).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to insert data",
+		})
+		return
+	}
+
+	// Respond with success
+	c.IndentedJSON(http.StatusOK, gin.H{
+		"message": "Loan created successfully",
+		"data":    newLoan,
+		"code":    "200",
+	})
+}
+
+// Get Data Loan in the database
+func GetLoan(c *gin.Context) {
+	userLoan := c.Query("user_loan") // Use query parameter to search by name
+	var getLoan []models.Loan
+
+	query := initializers.DB
+	if userLoan != "" {
+		query = query.Where("user_loan = ?", userLoan)
+	}
+
+	if err := query.Find(&getLoan).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch data",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	if len(getLoan) == 0 {
+		c.IndentedJSON(http.StatusNotFound, gin.H{
+			"message": "Loan not found",
+			"code":    404,
+		})
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, gin.H{
+		"message": "Get Data Loan",
+		"data":    getLoan,
+		"code":    200,
+	})
+}
+
 // postDepartement adds an Departement from JSON received in the request body.
 func PostDepartement(c *gin.Context) {
 	var newDepartement models.Departements
@@ -272,15 +361,29 @@ func PostDepartement(c *gin.Context) {
 
 }
 
+// GetDepartement get data in the database
 func GetDepartement(c *gin.Context) {
-
+	departementname := c.Query("departement_name")
 	var getDepartements []models.Departements
 
+	query := initializers.DB
+	if departementname != "" {
+		query = query.Where("departement_name  = ?", departementname)
+	}
+
 	// Fetch data from the database
-	if err := initializers.DB.Find(&getDepartements).Error; err != nil {
+	if err := query.Find(&getDepartements).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to fetch data",
+			"error":   "Failed to fatch data",
 			"message": err.Error(),
+		})
+		return
+	}
+
+	if len(getDepartements) == 0 {
+		c.IndentedJSON(http.StatusNotFound, gin.H{
+			"message": "Data Not Found",
+			"code":    "404",
 		})
 		return
 	}
@@ -321,7 +424,7 @@ func GetProfile(c *gin.Context) {
 		Email    string `json:"email"`
 		Address  string `json:"address"`
 	}{
-		ID:       user.ID,
+		ID:       user.ID_User,
 		Username: user.Username,
 		Role:     user.Role,
 		Phone:    user.Phone,
@@ -367,7 +470,7 @@ func GetUser(c *gin.Context) {
 			Email    string `json:"email"`
 			Address  string `json:"address"`
 		}{
-			ID:       user.ID,
+			ID:       user.ID_User,
 			Username: user.Username,
 			Role:     user.Role,
 			Phone:    user.Phone,
@@ -383,6 +486,7 @@ func GetUser(c *gin.Context) {
 	})
 }
 
+// GetDpertemenID updates a department by ID in the database
 func GetDepartementId(c *gin.Context) {
 	id := c.Param("id")
 
@@ -434,6 +538,7 @@ func PutDepartementId(c *gin.Context) {
 	})
 }
 
+// Delete a department by ID in the database
 func DeleteDepartement(c *gin.Context) {
 	// Get the ID from the URL params
 	idStr := c.Param("id")
