@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -655,11 +656,14 @@ func UploadFile(c *gin.Context) {
 	}
 	defer file.Close()
 
+	// Generate a new filename (e.g., adding timestamp)
+	ext := filepath.Ext(header.Filename)
+	newFilename := fmt.Sprintf("%d%s", time.Now().Unix(), ext)
+
 	// Create the destination file
-	filename := header.Filename
-	out, err := os.Create("./uploads/" + filename)
+	filePath := "./uploads/" + newFilename
+	out, err := os.Create(filePath)
 	if err != nil {
-		fmt.Println(filename, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create file"})
 		return
 	}
@@ -673,8 +677,8 @@ func UploadFile(c *gin.Context) {
 
 	// Insert file information into the database
 	newFile := models.File{
-		Filename: filename,
-		FilePath: "./uploads/" + filename,
+		Filename: newFilename,
+		FilePath: filePath,
 	}
 
 	if err := initializers.DB.Create(&newFile).Error; err != nil {
@@ -684,7 +688,7 @@ func UploadFile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "File uploaded successfully",
-		"filename": filename,
+		"filename": newFilename,
 		"code":     "200",
 	})
 }
