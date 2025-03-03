@@ -35,6 +35,7 @@ func main() {
 		auth.POST("loan/", controllers.PostLoan)
 		auth.GET("loan/", controllers.GetLoan)
 		auth.GET("loanview/", controllers.GetLoanUser)
+		auth.POST("uploadfile/", controllers.UploadFile)
 	}
 
 	router.Run()

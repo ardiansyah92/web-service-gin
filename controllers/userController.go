@@ -5,6 +5,7 @@ import (
 	"example/web-service-gin/models"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -101,9 +102,9 @@ func Register(c *gin.Context) {
 		Password string `json:"password"`
 		Role     bool   `json:"role"`
 		Phone    string `jso:"number"`
-		Email    string `json:email`
-		Address  string `json:address`
-		UserLoan string `json:user_loan`
+		Email    string `json:"email"`
+		Address  string `json:"address"`
+		UserLoan string `json:"user_loan"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -251,7 +252,6 @@ func PostLoan(c *gin.Context) {
 
 	// Get the logged-in user's ID and username from context
 	ID_User, exists := c.Get("id_user")
-	// username, userExists := c.Get("username")
 
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authorized"})
@@ -512,8 +512,9 @@ func GetLoanUser(c *gin.Context) {
 		})
 		return
 	}
-	result := initializers.DB.Table("loan_view").Where("username = ?", user).First(&getLoanView)
+	result := initializers.DB.Table("loan_view").Where("user = ?", user).First(&getLoanView)
 	if result.Error != nil {
+		fmt.Println(user, getLoanView)
 		c.JSON(http.StatusNotFound, gin.H{
 			"message": "Data Loan not found",
 			"code":    "404",
@@ -522,22 +523,22 @@ func GetLoanUser(c *gin.Context) {
 	}
 	// Prepare response without exposing passwords
 	var userloanview []struct {
-		Pokok_Pijaman  float64 `json:pokok_pijaman`
-		Bunga_Pertahun float64 `json:bunga_pertahun`
-		Bunga_Perbulan float64 `json:bunga_perbulan`
-		Harus_dibayar  float64 `json:harus_dibayar`
-		User           string  `json:user`
+		Pokok_Pinjaman float64 `json:"pokok_pinjaman"`
+		Bunga_Pertahun float64 `json:"bunga_pertahun"`
+		Bunga_Perbulan float64 `json:"bunga_perbulan"`
+		Harus_dibayar  float64 `json:"harus_dibayar"`
+		User           string  `json:"user"`
 	}
 
 	for _, user := range getLoanView {
 		userloanview = append(userloanview, struct {
-			Pokok_Pijaman  float64 `json:pokok_pijaman`
-			Bunga_Pertahun float64 `json:bunga_pertahun`
-			Bunga_Perbulan float64 `json:bunga_perbulan`
-			Harus_dibayar  float64 `json:harus_dibayar`
-			User           string  `json:user`
+			Pokok_Pinjaman float64 `json:"pokok_pinjaman"`
+			Bunga_Pertahun float64 `json:"bunga_pertahun"`
+			Bunga_Perbulan float64 `json:"bunga_perbulan"`
+			Harus_dibayar  float64 `json:"harus_dibayar"`
+			User           string  `json:"user"`
 		}{
-			Pokok_Pijaman:  user.Pokok_Pijaman,
+			Pokok_Pinjaman: user.Pokok_Pinjaman,
 			Bunga_Pertahun: user.Bunga_Pertahun,
 			Bunga_Perbulan: user.Bunga_Perbulan,
 			Harus_dibayar:  user.Harus_dibayar,
@@ -642,5 +643,48 @@ func DeleteDepartement(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, gin.H{
 		"message": "Department deleted successfully",
 		"code":    200,
+	})
+}
+
+func UploadFile(c *gin.Context) {
+	// Parse the form to retrieve the file
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to retrieve file"})
+		return
+	}
+	defer file.Close()
+
+	// Create the destination file
+	filename := header.Filename
+	out, err := os.Create("./uploads/" + filename)
+	if err != nil {
+		fmt.Println(filename, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create file"})
+		return
+	}
+	defer out.Close()
+
+	// Copy the uploaded file's content to the destination file
+	if _, err := out.ReadFrom(file); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+
+	// Insert file information into the database
+	newFile := models.File{
+		Filename: filename,
+		FilePath: "./uploads/" + filename,
+	}
+
+	if err := initializers.DB.Create(&newFile).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert file info into database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "File uploaded successfully",
+		"filename": filename,
+		"code":     "200",
 	})
 }

@@ -47,9 +47,15 @@ type Loan struct {
 }
 
 type Loan_View struct {
-	Pokok_Pijaman  float64 `json:pokok_pijaman`
-	Bunga_Pertahun float64 `json:bunga_pertahun`
-	Bunga_Perbulan float64 `json:bunga_perbulan`
-	Harus_dibayar  float64 `json:harus_dibayar`
-	User           string  `json:user`
+	Pokok_Pinjaman float64 `json:"pokok_pijaman"`
+	Bunga_Pertahun float64 `json:"bunga_pertahun"`
+	Bunga_Perbulan float64 `json:"bunga_perbulan"`
+	Harus_dibayar  float64 `json:"harus_dibayar"`
+	User           string  `json:"user"`
+}
+
+type File struct {
+	ID       uint   `json:"id_file" gorm:"primaryKey"`
+	Filename string `json:"filename"`
+	FilePath string `json:"file_path"`
 }
