@@ -33,6 +33,7 @@ type Users struct {
 	Phone    string `json:"phone" gorm:"unique;not null"`
 	Email    string `json:"email" gorm:"unique;not null"`
 	Address  string `json:"address" gorm:"unique;not null"`
+	UserLoan string `json:"user_loan" gorm:"unique;not null"`
 }
 
 type Loan struct {
@@ -42,4 +43,13 @@ type Loan struct {
 	Month            string `json:"month"`
 	User_Loan        string `json:"user_loan"`
 	ID_User          uint   `json:"id_user"`
+	Username         string `json:"username"`
+}
+
+type Loan_View struct {
+	Pokok_Pijaman  float64 `json:pokok_pijaman`
+	Bunga_Pertahun float64 `json:bunga_pertahun`
+	Bunga_Perbulan float64 `json:bunga_perbulan`
+	Harus_dibayar  float64 `json:harus_dibayar`
+	User           string  `json:user`
 }

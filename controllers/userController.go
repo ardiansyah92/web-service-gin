@@ -103,6 +103,7 @@ func Register(c *gin.Context) {
 		Phone    string `jso:"number"`
 		Email    string `json:email`
 		Address  string `json:address`
+		UserLoan string `json:user_loan`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -134,7 +135,7 @@ func Register(c *gin.Context) {
 	}
 
 	// Create user in database
-	user := models.Users{Username: request.Username, Password: string(hashedPassword), Role: request.Role, Phone: request.Phone, Email: request.Email, Address: request.Address}
+	user := models.Users{Username: request.Username, Password: string(hashedPassword), Role: request.Role, Phone: request.Phone, Email: request.Email, Address: request.Address, UserLoan: request.UserLoan}
 	result := models.DB.Create(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -248,51 +249,40 @@ func GetAlbumsByID(c *gin.Context) {
 func PostLoan(c *gin.Context) {
 	var newLoan models.Loan
 
-	// Get the logged-in user's ID from the context — set during authentication middleware
+	// Get the logged-in user's ID and username from context
 	ID_User, exists := c.Get("id_user")
-	// fmt.Println(ID_User)
+	// username, userExists := c.Get("username")
+
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "User not authorized",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authorized"})
 		return
 	}
 
 	// Bind the JSON request body to newLoan
 	if err := c.BindJSON(&newLoan); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Ensure ID_User is correctly converted to uint
-	switch v := ID_User.(type) {
-	case float64: // If ID_User is a float64 (common with JSON numbers)
-		newLoan.ID_User = uint(v)
-	case int: // If it's an int
-		newLoan.ID_User = uint(v)
-	case string: // If it's a string
-		userID, err := strconv.Atoi(v)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to convert user ID",
-			})
-			return
-		}
-		newLoan.ID_User = uint(userID)
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Unexpected type for user ID",
-		})
+	// Convert ID_User to uint
+	userID, err := convertToUint(ID_User)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to convert user ID"})
 		return
 	}
+	newLoan.ID_User = userID
+
+	// Assign username to newLoan
+	// usernameStr, ok := username.(string)
+	// if !ok {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to convert username"})
+	// 	return
+	// }
+	// newLoan.Username = usernameStr
 
 	// Insert new loan into the database
 	if err := initializers.DB.Create(&newLoan).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to insert data",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert data"})
 		return
 	}
 
@@ -302,6 +292,23 @@ func PostLoan(c *gin.Context) {
 		"data":    newLoan,
 		"code":    "200",
 	})
+}
+
+// convertToUint converts various types to uint
+func convertToUint(value interface{}) (uint, error) {
+	switch v := value.(type) {
+	case float64:
+		return uint(v), nil
+	case int:
+		return uint(v), nil
+	case string:
+		if userID, err := strconv.Atoi(v); err == nil {
+			return uint(userID), nil
+		}
+		return 0, fmt.Errorf("failed to convert string to int")
+	default:
+		return 0, fmt.Errorf("unexpected type for user ID")
+	}
 }
 
 // Get Data Loan in the database
@@ -482,6 +489,65 @@ func GetUser(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, gin.H{
 		"message": "Get Data User",
 		"data":    usersResponse,
+		"code":    "200",
+	})
+}
+
+func GetLoanUser(c *gin.Context) {
+	user, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Unauthorized",
+			"code":    "401",
+		})
+		return
+	}
+	// Fetch users from the database
+	var getLoanView []models.Loan_View
+
+	if err := initializers.DB.Table("loan_view").Find(&getLoanView).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch data",
+			"message": err.Error(),
+		})
+		return
+	}
+	result := initializers.DB.Table("loan_view").Where("username = ?", user).First(&getLoanView)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"message": "Data Loan not found",
+			"code":    "404",
+		})
+		return
+	}
+	// Prepare response without exposing passwords
+	var userloanview []struct {
+		Pokok_Pijaman  float64 `json:pokok_pijaman`
+		Bunga_Pertahun float64 `json:bunga_pertahun`
+		Bunga_Perbulan float64 `json:bunga_perbulan`
+		Harus_dibayar  float64 `json:harus_dibayar`
+		User           string  `json:user`
+	}
+
+	for _, user := range getLoanView {
+		userloanview = append(userloanview, struct {
+			Pokok_Pijaman  float64 `json:pokok_pijaman`
+			Bunga_Pertahun float64 `json:bunga_pertahun`
+			Bunga_Perbulan float64 `json:bunga_perbulan`
+			Harus_dibayar  float64 `json:harus_dibayar`
+			User           string  `json:user`
+		}{
+			Pokok_Pijaman:  user.Pokok_Pijaman,
+			Bunga_Pertahun: user.Bunga_Pertahun,
+			Bunga_Perbulan: user.Bunga_Perbulan,
+			Harus_dibayar:  user.Harus_dibayar,
+			User:           user.User,
+		})
+	}
+
+	c.IndentedJSON(http.StatusOK, gin.H{
+		"message": "Get Data User Loan",
+		"data":    getLoanView,
 		"code":    "200",
 	})
 }
