@@ -37,6 +37,7 @@ func main() {
 		auth.GET("loanview/", controllers.GetLoanUser)
 		auth.POST("uploadfile/", controllers.UploadFile)
 	}
+	router.RedirectTrailingSlash = false
 
 	router.Run()
 }

@@ -29,7 +29,7 @@ type Users struct {
 	ID_User  uint   `json:"id_user" gorm:"primaryKey;autoIncrement"`
 	Username string `json:"username" gorm:"unique;not null"`
 	Password string `json:"password" gorm:"not null"`
-	Role     bool   `json:"role" gorm:"default:false"`
+	IsRole   bool   `json:"is_role" gorm:"default:false"`
 	Phone    string `json:"phone" gorm:"unique;not null"`
 	Email    string `json:"email" gorm:"unique;not null"`
 	Address  string `json:"address" gorm:"unique;not null"`
@@ -58,4 +58,5 @@ type File struct {
 	ID       uint   `json:"id_file" gorm:"primaryKey"`
 	Filename string `json:"filename"`
 	FilePath string `json:"file_path"`
+	ID_User  uint   `json:"id_user"`
 }

@@ -101,8 +101,8 @@ func Register(c *gin.Context) {
 		ID_User  uint   `json:"id_user" gorm:"primaryKey;autoIncrement"`
 		Username string `json:"username"`
 		Password string `json:"password"`
-		Role     bool   `json:"role"`
-		Phone    string `jso:"number"`
+		IsRole   bool   `json:"is_role"`
+		Phone    string `json:"phone"`
 		Email    string `json:"email"`
 		Address  string `json:"address"`
 		UserLoan string `json:"user_loan"`
@@ -137,7 +137,7 @@ func Register(c *gin.Context) {
 	}
 
 	// Create user in database
-	user := models.Users{Username: request.Username, Password: string(hashedPassword), Role: request.Role, Phone: request.Phone, Email: request.Email, Address: request.Address, UserLoan: request.UserLoan}
+	user := models.Users{Username: request.Username, Password: string(hashedPassword), IsRole: request.IsRole, Phone: request.Phone, Email: request.Email, Address: request.Address, UserLoan: request.UserLoan}
 	result := models.DB.Create(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -187,7 +187,7 @@ func Login(c *gin.Context) {
 	}
 
 	// Generate JWT token
-	token, _ := GenerateJWT(user.Username, user.Role, user.ID_User)
+	token, _ := GenerateJWT(user.Username, user.IsRole, user.ID_User)
 
 	c.JSON(http.StatusOK, gin.H{
 		// "data":    datauserresponse,
@@ -427,14 +427,14 @@ func GetProfile(c *gin.Context) {
 	getMeprofile := struct {
 		ID       uint   `json:"id_user"`
 		Username string `json:"username"`
-		Role     bool   `json:"role"`
+		Role     bool   `json:"isrole"`
 		Phone    string `json:"phone"`
 		Email    string `json:"email"`
 		Address  string `json:"address"`
 	}{
 		ID:       user.ID_User,
 		Username: user.Username,
-		Role:     user.Role,
+		Role:     user.IsRole,
 		Phone:    user.Phone,
 		Email:    user.Email,
 		Address:  user.Address,
@@ -463,7 +463,7 @@ func GetUser(c *gin.Context) {
 	var usersResponse []struct {
 		ID       uint   `json:"id_user"`
 		Username string `json:"username"`
-		Role     bool   `json:"role"`
+		Role     bool   `json:"isrole"`
 		Phone    string `json:"phone"`
 		Email    string `json:"email"`
 		Address  string `json:"address"`
@@ -473,14 +473,14 @@ func GetUser(c *gin.Context) {
 		usersResponse = append(usersResponse, struct {
 			ID       uint   `json:"id_user"`
 			Username string `json:"username"`
-			Role     bool   `json:"role"`
+			Role     bool   `json:"isrole"`
 			Phone    string `json:"phone"`
 			Email    string `json:"email"`
 			Address  string `json:"address"`
 		}{
 			ID:       user.ID_User,
 			Username: user.Username,
-			Role:     user.Role,
+			Role:     user.IsRole,
 			Phone:    user.Phone,
 			Email:    user.Email,
 			Address:  user.Address,
@@ -648,6 +648,7 @@ func DeleteDepartement(c *gin.Context) {
 }
 
 func UploadFile(c *gin.Context) {
+
 	// Parse the form to retrieve the file
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -656,8 +657,28 @@ func UploadFile(c *gin.Context) {
 	}
 	defer file.Close()
 
+	const maxFileSize = 2 * 1000 * 1000 // 2MB
+	if header.Size > maxFileSize {      // Fix the condition here
+		fmt.Println("File size:", header.Size)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "File size exceeds the 2MB limit",
+		})
+		return
+	}
+
+	//Check file extension only (.png and .jpg)
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext != ".png" && ext != ".jpg" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "File must .png, .jpg",
+		})
+		return
+	}
+
 	// Generate a new filename (e.g., adding timestamp)
-	ext := filepath.Ext(header.Filename)
+	// ext := filepath.Ext(header.Filename)
 	newFilename := fmt.Sprintf("%d%s", time.Now().Unix(), ext)
 
 	// Create the destination file
@@ -681,6 +702,20 @@ func UploadFile(c *gin.Context) {
 		FilePath: filePath,
 	}
 
+	ID_User, exists := c.Get("id_user")
+
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authorized"})
+		return
+	}
+	// Convert ID_User to uint
+	userID, err := convertToUint(ID_User)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to convert user ID"})
+		return
+	}
+	newFile.ID_User = userID
+
 	if err := initializers.DB.Create(&newFile).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert file info into database"})
 		return
@@ -689,6 +724,6 @@ func UploadFile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "File uploaded successfully",
 		"filename": newFilename,
-		"code":     "200",
+		"code":     200,
 	})
 }
